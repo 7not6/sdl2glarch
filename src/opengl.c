@@ -172,6 +172,7 @@ PFNGLUNIFORMMATRIX4FVPROC glUniformMatrix4fv;
 PFNGLBINDATTRIBLOCATIONPROC glBindAttribLocation;
 PFNGLGETACTIVEUNIFORMPROC glGetActiveUniform;
 PFNGLGETACTIVEATTRIBPROC glGetActiveAttrib;
+PFNGLBUFFERSUBDATAPROC glBufferSubData;
 
 bool initGLExtensions() {
 	glCreateShader = (PFNGLCREATESHADERPROC)SDL_GL_GetProcAddress("glCreateShader");
@@ -207,6 +208,7 @@ bool initGLExtensions() {
 	glBindAttribLocation = (PFNGLBINDATTRIBLOCATIONPROC)SDL_GL_GetProcAddress("glBindAttribLocation");
 	glGetActiveUniform = (PFNGLGETACTIVEUNIFORMPROC)SDL_GL_GetProcAddress("glGetActiveUniform");
 	glGetActiveAttrib = (PFNGLGETACTIVEATTRIBPROC)SDL_GL_GetProcAddress("glGetActiveAttrib");
+	glBufferSubData = (PFNGLBUFFERSUBDATAPROC)SDL_GL_GetProcAddress("glBufferSubData");
 	
 	return glCreateShader && glShaderSource && glCompileShader && glGetShaderiv && 
 		glGetShaderInfoLog && glDeleteShader && glAttachShader && glCreateProgram &&
@@ -216,7 +218,7 @@ bool initGLExtensions() {
 		glGenBuffers && glBindBuffer && glBufferData && glEnableVertexAttribArray &&
 		glVertexAttribPointer && glUniform1i && glDisableVertexAttribArray && glUniform2f &&
 		glUniformMatrix4fv && glBindAttribLocation && glGetActiveUniform && glGetActiveAttrib &&
-		glUniform4f;
+		glUniform4f && glBufferSubData;
 }
 
 GLuint compileShader(const char* source, GLuint shaderType) {
