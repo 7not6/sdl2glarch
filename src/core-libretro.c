@@ -4,7 +4,7 @@
 
 extern SDL_Window* window;
 extern Mouse mouse;
-
+extern GLuint fbo;
 extern Coption *coreopt;
 extern int nb_coreopt;
 extern bool coreoptupdate;
@@ -24,6 +24,13 @@ static G_retro g_retro;
 
 struct retro_variable *g_vars = NULL;
 struct retro_audio_callback audio_callback;
+struct retro_hw_render_callback hw;
+
+static void noop() {}
+
+uintptr_t core_get_current_framebuffer() {
+    return fbo;
+}
 
 void core_reset()
 {
@@ -157,6 +164,15 @@ static bool core_environment(unsigned cmd, void *data) {
 
 		return video_set_pixel_format(*fmt);
 	}
+	
+	case RETRO_ENVIRONMENT_SET_HW_RENDER: {
+        	struct retro_hw_render_callback *hwc = (struct retro_hw_render_callback*)data;
+        	hwc->get_current_framebuffer = core_get_current_framebuffer;
+        	hwc->get_proc_address = (retro_hw_get_proc_address_t)SDL_GL_GetProcAddress;
+        	hw = *hwc;
+        	return true;
+    	}
+    	
 	case RETRO_ENVIRONMENT_GET_SYSTEM_DIRECTORY:
 	case RETRO_ENVIRONMENT_GET_SAVE_DIRECTORY:
 		*(const char **)data = ".";
@@ -436,6 +452,12 @@ int core_main(int argc, char *argv[]) {
 		opts++;
 	}
 	
+	hw.version_major = 4;
+    	hw.version_minor = 5;
+    	hw.context_type  = RETRO_HW_CONTEXT_OPENGL_CORE;
+    	hw.context_reset   = noop;
+    	hw.context_destroy = noop;
+    
 	core_load(argv[1]);
 	
 	if (!g_retro.supports_no_game && argc < 3)

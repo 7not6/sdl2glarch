@@ -1,12 +1,11 @@
 #include "common.h"
 
-#include <GL/gl.h>
-
 extern int SCREEN_W,SCREEN_H;
 extern int TEX_W,TEX_H;
 extern int TEXC_W,TEXC_H;
 extern bool shader_disable;
 extern float UV[FONT_BOXW*FONT_BOXH][4];
+extern struct retro_hw_render_callback hw;
 
 int current_shader=0;
 
@@ -21,12 +20,15 @@ GLint i_coord;
 	
 GLuint vao;
 GLuint vbo;
-GLuint font_vao,font_vbo;
+GLuint font_vao;
+GLuint font_vbo;
+GLuint fbo;
+GLuint rbo;
 
 int glmajor;
 int glminor;
 	
-GLfloat projection[4][4];	
+GLfloat projection[4][4];
    	
 static const char *g_vshader_src =
     "#version 150\n"
@@ -139,6 +141,7 @@ char *shader_name[] = {
   "shaders: gray"
 };
 
+
 PFNGLCREATESHADERPROC glCreateShader;
 PFNGLSHADERSOURCEPROC glShaderSource;
 PFNGLCOMPILESHADERPROC glCompileShader;
@@ -173,6 +176,16 @@ PFNGLBINDATTRIBLOCATIONPROC glBindAttribLocation;
 PFNGLGETACTIVEUNIFORMPROC glGetActiveUniform;
 PFNGLGETACTIVEATTRIBPROC glGetActiveAttrib;
 PFNGLBUFFERSUBDATAPROC glBufferSubData;
+PFNGLDELETEFRAMEBUFFERSPROC glDeleteFramebuffers;
+PFNGLGENFRAMEBUFFERSPROC glGenFramebuffers;
+PFNGLBINDFRAMEBUFFERPROC glBindFramebuffer;
+PFNGLFRAMEBUFFERTEXTURE2DPROC glFramebufferTexture2D;
+PFNGLGENRENDERBUFFERSPROC glGenRenderbuffers;
+PFNGLBINDRENDERBUFFERPROC glBindRenderbuffer;
+PFNGLRENDERBUFFERSTORAGEPROC glRenderbufferStorage;
+PFNGLFRAMEBUFFERRENDERBUFFERPROC glFramebufferRenderbuffer;
+PFNGLCHECKFRAMEBUFFERSTATUSPROC glCheckFramebufferStatus;
+PFNGLDELETERENDERBUFFERSPROC glDeleteRenderbuffers;
 
 bool initGLExtensions() {
 	glCreateShader = (PFNGLCREATESHADERPROC)SDL_GL_GetProcAddress("glCreateShader");
@@ -209,7 +222,18 @@ bool initGLExtensions() {
 	glGetActiveUniform = (PFNGLGETACTIVEUNIFORMPROC)SDL_GL_GetProcAddress("glGetActiveUniform");
 	glGetActiveAttrib = (PFNGLGETACTIVEATTRIBPROC)SDL_GL_GetProcAddress("glGetActiveAttrib");
 	glBufferSubData = (PFNGLBUFFERSUBDATAPROC)SDL_GL_GetProcAddress("glBufferSubData");
+	glDeleteFramebuffers = (PFNGLDELETEFRAMEBUFFERSPROC)SDL_GL_GetProcAddress("glDeleteFramebuffers");
+	glGenFramebuffers = (PFNGLGENFRAMEBUFFERSPROC)SDL_GL_GetProcAddress("glGenFramebuffers");
+	glBindFramebuffer = (PFNGLBINDFRAMEBUFFERPROC)SDL_GL_GetProcAddress("glBindFramebuffer");
+	glFramebufferTexture2D = (PFNGLFRAMEBUFFERTEXTURE2DPROC)SDL_GL_GetProcAddress("glFramebufferTexture2D");
+	glGenRenderbuffers = (PFNGLGENRENDERBUFFERSPROC)SDL_GL_GetProcAddress("glGenRenderbuffers");
+	glBindRenderbuffer = (PFNGLBINDRENDERBUFFERPROC)SDL_GL_GetProcAddress("glBindRenderbuffer");
+	glRenderbufferStorage = (PFNGLRENDERBUFFERSTORAGEPROC)SDL_GL_GetProcAddress("glRenderbufferStorage");
+	glFramebufferRenderbuffer = (PFNGLFRAMEBUFFERRENDERBUFFERPROC)SDL_GL_GetProcAddress("glFramebufferRenderbuffer");
+	glCheckFramebufferStatus = (PFNGLCHECKFRAMEBUFFERSTATUSPROC)SDL_GL_GetProcAddress("glCheckFramebufferStatus");
+	glDeleteRenderbuffers = (PFNGLDELETERENDERBUFFERSPROC)SDL_GL_GetProcAddress("glDeleteRenderbuffers");
 	
+
 	return glCreateShader && glShaderSource && glCompileShader && glGetShaderiv && 
 		glGetShaderInfoLog && glDeleteShader && glAttachShader && glCreateProgram &&
 		glLinkProgram && glValidateProgram && glGetProgramiv && glGetProgramInfoLog &&
@@ -218,7 +242,14 @@ bool initGLExtensions() {
 		glGenBuffers && glBindBuffer && glBufferData && glEnableVertexAttribArray &&
 		glVertexAttribPointer && glUniform1i && glDisableVertexAttribArray && glUniform2f &&
 		glUniformMatrix4fv && glBindAttribLocation && glGetActiveUniform && glGetActiveAttrib &&
-		glUniform4f && glBufferSubData;
+		glUniform4f && glBufferSubData && glDeleteFramebuffers && glGenFramebuffers && 
+		glBindFramebuffer && glFramebufferTexture2D && glGenRenderbuffers && glBindRenderbuffer && 
+		glRenderbufferStorage && glFramebufferRenderbuffer && glCheckFramebufferStatus && glDeleteRenderbuffers;
+}
+
+void bindFramebuffer(void)
+{
+	glBindFramebuffer(GL_FRAMEBUFFER, 0);
 }
 
 GLuint compileShader(const char* source, GLuint shaderType) {
@@ -432,7 +463,7 @@ void drawTextureGL(GLuint backBuffer) {
 
     	GLint oldProgramId;
     	
-	//glActiveTexture(GL_TEXTURE0);
+	glActiveTexture(GL_TEXTURE0);
 	glBindTexture(GL_TEXTURE_2D, backBuffer);
 
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR/*GL_NEAREST*/);
@@ -485,10 +516,19 @@ int initGL()
      	glGenBuffers(1, &vbo);
      	
 	glUseProgram(Program_fontId);	
+	
 	ortho2d(projection, -1, 1, -1, 1);
+		
     	glUniformMatrix4fv(u_texture_projection, 1, GL_FALSE, (GLfloat *)projection);
     	
 	glUseProgram(ProgramId);
+	
+	if (hw.bottom_left_origin){
+	    	ortho2d(projection, -1, 1, 1, -1);
+	 }
+	else
+		ortho2d(projection, -1, 1, -1, 1);
+		
     	glUniformMatrix4fv(u_texture_projection, 1, GL_FALSE, (GLfloat *)projection);
 
 	glUniform1i(g_tex_uniform, 0);	
@@ -513,6 +553,14 @@ int initGL()
 
 void deinitGL() {
 
+	if (rbo)
+		glDeleteRenderbuffers(1, &rbo);
+	rbo = 0;
+	
+	if (fbo)
+	        glDeleteFramebuffers(1, &fbo);
+	fbo = 0;
+	
 	if (vao)
         	glDeleteVertexArrays(1, &vao);
 
@@ -627,8 +675,13 @@ void change_shaders(){
 	glUseProgram(ProgramId);
 	glUniform1i(g_tex_uniform, 0);	
 	glUniform2f(o_size, SCREEN_W, SCREEN_H);
-        glUniform2f(t_size, TEXC_W, TEXC_H);          
-       	ortho2d(projection, -1, 1, -1, 1);
+        glUniform2f(t_size, TEXC_W, TEXC_H);   
+        
+        if (hw.bottom_left_origin)
+	    	ortho2d(projection, -1, 1, 1, -1);
+	else     
+       		ortho2d(projection, -1, 1, -1, 1);
+       		
     	glUniformMatrix4fv(u_texture_projection, 1, GL_FALSE, (GLfloat *)projection);
 		  
     	//printf("attribute localiton pos:%d coord:%d \n",i_pos,i_coord);		
@@ -637,5 +690,46 @@ void change_shaders(){
 		
 	glUseProgram(0);
     
+}
+
+void init_framebuffer(int width, int height,GLuint texture)
+{
+    glGenFramebuffers(1, &fbo);
+    glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, texture , 0);
+ 
+    printf("hw  %d %d f:%d %d \n",hw.version_major,hw.version_minor,fbo,texture);
+   
+    if (hw.depth && hw.stencil) {
+    printf("hw depth && stencil\n");
+    
+        glGenRenderbuffers(1, &rbo);
+        glBindRenderbuffer(GL_RENDERBUFFER, rbo);
+        glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH24_STENCIL8, width, height);
+
+        glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_RENDERBUFFER, rbo);
+    } else if (hw.depth) {
+        printf("hw depth\n");
+        glGenRenderbuffers(1, &rbo);
+        glBindRenderbuffer(GL_RENDERBUFFER, rbo);
+        glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT24, width, height);
+
+        glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, rbo);
+    }
+
+    if (hw.depth || hw.stencil){
+    
+    	if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
+    		die("ERROR::FRAMEBUFFER:: Framebuffer is not complete!");
+    		
+        glBindRenderbuffer(GL_RENDERBUFFER, 0);
+    }
+
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+    glClearColor(0, 0, 0, 1);
+    glClear(GL_COLOR_BUFFER_BIT);
+
 }
 

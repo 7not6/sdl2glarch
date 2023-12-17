@@ -316,7 +316,7 @@ static void menu_logic(void)
 	if ( keyboard[SDL_SCANCODE_ESCAPE] == 1) {
 		//printf("quit!!!\n");
 		quit=true;
-	}			
+	}	
 }
 
 static void menu_draw(void)

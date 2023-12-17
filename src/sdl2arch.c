@@ -41,8 +41,7 @@ int main(int argc, char *argv[]) {
    		{
       			fps_lasttime = SDL_GetTicks();
       			fps_current = fps_frames;
-      			fps_frames = 0;
-      			//printf("fps:%d\n",fps_current);
+      			fps_frames = 0;      			
    		}
 	  	
 	}

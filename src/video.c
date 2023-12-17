@@ -1,30 +1,22 @@
 #include "common.h"
 
-SDL_GLContext *g_ctx = NULL;
-
+extern struct retro_hw_render_callback hw;
 extern float g_scale;
-
+extern PFNGLBINDFRAMEBUFFERPROC glBindFramebuffer;
 static G_video g_video  = {0};
 
+SDL_GLContext *g_ctx = NULL;
 SDL_Window* window = NULL;
 
 int SCREEN_W,SCREEN_H;
 int TEX_W,TEX_H;
 int TEXC_W,TEXC_H;
 
-void video_setgeometry(int w,int h){
-    
-	g_video.clip_w = w;
-    g_video.clip_h = h;  
-		
-	TEX_W=g_video.tex_w;
-	TEX_H=g_video.tex_h;
-	TEXC_W=g_video.clip_w;
-	TEXC_H=g_video.clip_h;  		
-}
-
+ 
 void prepareScene(void)
 {
+	bindFramebuffer();
+	glDisable(GL_DEPTH_TEST); 
 	glClearColor(0.f,0.f,0.f,1.f);
 	glClear(GL_COLOR_BUFFER_BIT);
 }
@@ -32,6 +24,17 @@ void prepareScene(void)
 void presentScene(void)
 {
 	SDL_GL_SwapWindow(window);
+}
+
+void video_setgeometry(int w,int h){
+    
+	g_video.clip_w = w;
+	g_video.clip_h = h;  
+		
+	TEX_W=g_video.tex_w;
+	TEX_H=g_video.tex_h;
+	TEXC_W=g_video.clip_w;
+	TEXC_H=g_video.clip_h;  		
 }
 
 void resize_cb(int w, int h) {
@@ -56,14 +59,33 @@ static void create_window(int width, int height) {
 
 	SDL_GL_SetAttribute(SDL_GL_SHARE_WITH_CURRENT_CONTEXT, 1);
        
-        SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
-    	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
-    	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 3);
-    	
+        if (hw.context_type == RETRO_HW_CONTEXT_OPENGL_CORE || hw.version_major >= 3) {
+        	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, hw.version_major);
+        	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, hw.version_minor);
+        	SDL_GL_SetAttribute(SDL_GL_CONTEXT_FLAGS, SDL_GL_CONTEXT_DEBUG_FLAG);
+        }
+    
+        switch (hw.context_type) {
+        
+    		case RETRO_HW_CONTEXT_OPENGL_CORE:
+        		SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
+        		break;
+    		case RETRO_HW_CONTEXT_OPENGLES2:
+        		SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_ES);
+        		break;
+    		case RETRO_HW_CONTEXT_OPENGL:
+        		if (hw.version_major >= 3)
+            			SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_COMPATIBILITY);
+        		break;
+    		default:
+        	die("Unsupported hw context %i. (only OPENGL, OPENGL_CORE and OPENGLES2 supported)", hw.context_type);
+    	}
+
         SDL_GL_SetAttribute(SDL_GL_RED_SIZE, 8);
     	SDL_GL_SetAttribute(SDL_GL_GREEN_SIZE, 8);
    	SDL_GL_SetAttribute(SDL_GL_BLUE_SIZE, 8);
    	SDL_GL_SetAttribute(SDL_GL_ALPHA_SIZE, 8);
+   	
         SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
     	SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 24);
     	SDL_GL_SetAttribute(SDL_GL_STENCIL_SIZE, 8);
@@ -85,7 +107,10 @@ static void create_window(int width, int height) {
 	
 	g_ctx = SDL_GL_CreateContext(window);
     	SDL_GL_MakeCurrent(window, g_ctx);
-	
+    	
+	if (hw.context_type == RETRO_HW_CONTEXT_OPENGLES2)        
+            die("Failed to initialize GLES2.");
+            
 	if (!initGL()) {
 		die("Failed to init GL!");
 	}
@@ -135,6 +160,8 @@ void video_configure(const struct retro_game_geometry *geom) {
 
 	glBindTexture(GL_TEXTURE_2D, 0);
 	
+	init_framebuffer(geom->max_width, geom->max_height,g_video.texture);
+	
 	g_video.tex_w = geom->max_width;
 	g_video.tex_h = geom->max_height;
 	g_video.clip_w = geom->base_width;
@@ -146,6 +173,8 @@ void video_configure(const struct retro_game_geometry *geom) {
 	TEXC_H=g_video.clip_h;
 	
 	refresh_vertex_data();
+	
+	hw.context_reset();
 }
 
 
@@ -204,22 +233,29 @@ void video_refresh(const void *data, unsigned width, unsigned height, unsigned p
 	if (g_video.clip_w != width || g_video.clip_h != height) {
 		g_video.clip_h = height;
 		g_video.clip_w = width;
-		//refresh_vertex_data();
-		printf("rrrrrr\n");		
+		refresh_vertex_data();	
 	}
+		
+	glBindFramebuffer(GL_FRAMEBUFFER, 0);
+	glBindTexture(GL_TEXTURE_2D, g_video.texture);
+	
 	if (pitch != g_video.pitch) {
 		g_video.pitch = pitch;
 		//printf("change pitch:%d\n",pitch);
 		//printf("refresh t(%d,%d) c(%d,%d)\n",g_video.tex_w,g_video.tex_h,g_video.clip_w,g_video.clip_h);
 	}
 
-	if (data) {
-		glBindTexture(GL_TEXTURE_2D, g_video.texture);
-		//printf("%d %d %d %d %d \n",width,  height,  pitch,g_video.pixtype, g_video.pixfmt);	
-		glPixelStorei(GL_UNPACK_ROW_LENGTH, g_video.pitch / g_video.bpp);
+	if (data && data != RETRO_HW_FRAME_BUFFER_VALID) {
+		glPixelStorei(GL_UNPACK_ROW_LENGTH, g_video.pitch / g_video.bpp);		
 		glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, width, height,
 						g_video.pixtype, g_video.pixfmt, data);
-	}		
+	}	
+	else {
+		int w = 0, h = 0;
+   	 	SDL_GetWindowSize(window, &w, &h);
+   	 	glViewport(0, 0, w, h);
+	}
+
 }
 
 void video_render() {
@@ -229,12 +265,12 @@ void video_render() {
 
 void video_deinit() {
 
-		if (g_video.texture)
+	if (g_video.texture)
 		glDeleteTextures(1, &g_video.texture);
 		       
-		g_video.texture = 0;
+	g_video.texture = 0;
 	
-		SDL_GL_MakeCurrent(window, g_ctx);
+	SDL_GL_MakeCurrent(window, g_ctx);
     	SDL_GL_DeleteContext(g_ctx);
 
     	g_ctx = NULL;

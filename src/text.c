@@ -64,7 +64,7 @@ void initFonts(void)
 
 	if (!fontTexture)
 		die("Failed to create the font texture");
-		
+
 	glBindTexture(GL_TEXTURE_2D, fontTexture);
 	
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);

@@ -7,8 +7,9 @@
 #include <errno.h>
 #include <string.h>
 
-#include <SDL_opengl.h>
-#include <SDL_opengl_glext.h>
+//#include <SDL_opengl.h>
+//#include <SDL_opengl_glext.h>
+#include <GL/gl.h>
 
 #include "libretro.h"
 
@@ -94,3 +95,6 @@ void change_shaders();
 void blitFontGL(GLuint backBuffer, int idx, int x, int y,float scale);
 void RestorePrgGL();
 void SetFontColorGL(int r,int  g,int  b);
+void init_framebuffer(int width, int height,GLuint texture);
+void bindFramebuffer(void);
+
