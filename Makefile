@@ -1,4 +1,4 @@
-target   := sdl2arch
+target   := sdlgl2arch
 sources  := src/sdl2arch.c src/audio.c src/core-libretro.c src/emu.c src/fifo.c src/input.c src/opengl.c
 sources  += src/menu.c src/text.c src/utli.c src/video.c src/widgets.c src/core-options.c  
 INCLUDES := -I. -I./src
