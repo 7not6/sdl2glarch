@@ -108,8 +108,8 @@ static void create_window(int width, int height) {
 	g_ctx = SDL_GL_CreateContext(window);
     	SDL_GL_MakeCurrent(window, g_ctx);
     	
-	if (hw.context_type == RETRO_HW_CONTEXT_OPENGLES2)        
-            die("Failed to initialize GLES2.");
+	//if (hw.context_type == RETRO_HW_CONTEXT_OPENGLES2)        
+        //    die("Failed to initialize GLES2.");
             
 	if (!initGL()) {
 		die("Failed to init GL!");
